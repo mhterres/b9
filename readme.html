@@ -1,0 +1,71 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+
+<html>
+<head>
+<title>B9 Plugin Readme</title>
+<style type="text/css">
+  BODY {
+      font-size : 100%;
+  }
+  BODY, TD, TH {
+      font-family : tahoma, verdana, arial, helvetica, sans-serif;
+      font-size : 0.8em;
+  }
+  H2 {
+       font-size : 10pt;
+       font-weight : bold;
+  }
+  A:hover {
+      text-decoration : none;
+  }
+  H1 {
+      font-family : tahoma, arial, helvetica, sans-serif;
+      font-size : 1.4em;
+      font-weight: bold;
+      border-bottom : 1px #ccc solid;
+      padding-bottom : 2px;
+  }
+
+  TT {
+      font-family : courier new;
+      font-weight : bold;
+      color : #060;
+  }
+  PRE {
+      font-family : courier new;
+      font-size : 100%;
+  }
+</style>
+</head>
+<body>
+
+<h1>B9 Plugin Readme</h1>
+
+<h2>Overview</h2>
+<p>Administrate Openfire with B9 plugin.
+</p>
+
+<h2>Installation</h2>
+<p>Use console admin to upload the plugin or copy the b9.jar into the plugins directory of your Openfire installation. The plugin will then be automatically deployed. To upgrade to a new version, copy the new b9.jar file over the existing file.</p>
+
+<h2>Using the Plugin</h2>
+<ul>
+   <li>Send a message with content "total users" to b9@adminbot.jabberdomain to receive the number of total users.</li>
+   <li>Send a message with content "online users" to b9@adminbot.jabberdomain to receive the number of online users.</li>
+   <li>Send a message with content "server sessions" to b9@adminbot.jabberdomain to receive the number of incoming server sessions.</li>
+   <li>Send a message with content "version" to b9@adminbot.jabberdomain to receive plugin version.</li>
+   <li>Send a message with content "openfire version" to b9@adminbot.jabberdomain to receive Openfire version.</li>
+   <li>Send a message with content "openfire host" to b9@adminbot.jabberdomain to receive Openfire hostname.</li>
+   <li>Send a message with content "openfire uptime" to b9@adminbot.jabberdomain to receive Openfire last started time.</li>
+   <li>Send a message with content "java version" to b9@adminbot.jabberdomain to receive Java version.</li>
+   <li>Send a message with content "total memory" to b9@adminbot.jabberdomain to receive total available memory to the jvm.</li>
+   <li>Send a message with content "free memory" to b9@adminbot.jabberdomain to receive free available memory to the jvm.</li>
+   <li>Send a message with content "used memory" to b9@adminbot.jabberdomain to receive used memory by the jvm.</li>
+   <li>Send a message with content "max memory" to b9@adminbot.jabberdomain to receive maximum available memory to the jvm.</li>
+   <li>Send a message with content "total memory num" to b9@adminbot.jabberdomain to receive total available memory to the jvm (in MB).</li>
+</ul>
+
+<p>After version 0.2 you can open a connection to port 4455 and send the same messages to obtain data.</p>
+
+</body>
+
