@@ -46,26 +46,53 @@
 </p>
 
 <h2>Installation</h2>
-<p>Use console admin to upload the plugin or copy the b9.jar into the plugins directory of your Openfire installation. The plugin will then be automatically deployed. To upgrade to a new version, copy the new b9.jar file over the existing file.</p>
+<p>Use console admin to upload the plugin or copy the b9.jar into the plugins directory of your Openfire installation. The plugin will then be automatically deployed. To upgrade to a new version, copy the new b9.jar file over the existing file or use console admin.</p>
 
 <h2>Using the Plugin</h2>
 <ul>
-   <li>Send a message with content "total users" to b9@adminbot.jabberdomain to receive the number of total users.</li>
-   <li>Send a message with content "online users" to b9@adminbot.jabberdomain to receive the number of online users.</li>
-   <li>Send a message with content "server sessions" to b9@adminbot.jabberdomain to receive the number of incoming server sessions.</li>
-   <li>Send a message with content "version" to b9@adminbot.jabberdomain to receive plugin version.</li>
-   <li>Send a message with content "openfire version" to b9@adminbot.jabberdomain to receive Openfire version.</li>
-   <li>Send a message with content "openfire host" to b9@adminbot.jabberdomain to receive Openfire hostname.</li>
-   <li>Send a message with content "openfire uptime" to b9@adminbot.jabberdomain to receive Openfire last started time.</li>
-   <li>Send a message with content "java version" to b9@adminbot.jabberdomain to receive Java version.</li>
-   <li>Send a message with content "total memory" to b9@adminbot.jabberdomain to receive total available memory to the jvm.</li>
-   <li>Send a message with content "free memory" to b9@adminbot.jabberdomain to receive free available memory to the jvm.</li>
-   <li>Send a message with content "used memory" to b9@adminbot.jabberdomain to receive used memory by the jvm.</li>
-   <li>Send a message with content "max memory" to b9@adminbot.jabberdomain to receive maximum available memory to the jvm.</li>
-   <li>Send a message with content "total memory num" to b9@adminbot.jabberdomain to receive total available memory to the jvm (in MB).</li>
+   <li>Send a message with content "anonymous login" to b9@adminbot.jabberdomain to get the configuration of anonymous login.</li>
+   <li>Send a message with content "anonymous login disable" to b9@adminbot.jabberdomain to disable anonymous login.</li>
+   <li>Send a message with content "anonymous login enable" to b9@adminbot.jabberdomain to enable anonymous login.</li>
+   <li>Send a message with content "c2s compression" to b9@adminbot.jabberdomain to get the configuration of c2s compression.</li>
+   <li>Send a message with content "c2s compression disable" to b9@adminbot.jabberdomain to disable c2s compression.</li>
+   <li>Send a message with content "c2s compression enable" to b9@adminbot.jabberdomain to enable c2s compression.</li>
+   <li>Send a message with content "free memory" to b9@adminbot.jabberdomain to get free available memory to the jvm.</li>
+   <li>Send a message with content "group members <group name>" to b9@adminbot.jabberdomain to get the list of members of a group.</li>
+   <li>Send a message with content "help" to b9@adminbot.jabberdomain to get the list of available commands.</li>
+   <li>Send a message with content "java version" to b9@adminbot.jabberdomain to get Java version.</li>
+   <li>Send a message with content "list conferences" to b9@adminbot.jabberdomain to get the list of conference rooms.</li>
+   <li>Send a message with content "list groups" to b9@adminbot.jabberdomain to get the list of groups.</li>
+   <li>Send a message with content "max memory" to b9@adminbot.jabberdomain to get maximum available memory to the jvm.</li>
+   <li>Send a message with content "online users" to b9@adminbot.jabberdomain to get the number of online users.</li>
+   <li>Send a message with content "openfire version" to b9@adminbot.jabberdomain to get Openfire version.</li>
+   <li>Send a message with content "openfire host" to b9@adminbot.jabberdomain to get Openfire hostname.</li>
+   <li>Send a message with content "openfire uptime" to b9@adminbot.jabberdomain to get Openfire last started time.</li>
+   <li>Send a message with content "s2s compression" to b9@adminbot.jabberdomain to get the configuration of s2s compression.</li>
+   <li>Send a message with content "s2s compression disable" to b9@adminbot.jabberdomain to disable s2s compression.</li>
+   <li>Send a message with content "s2s compression enable" to b9@adminbot.jabberdomain to enable s2s compression.</li>
+   <li>Send a message with content "s2s config" to b9@adminbot.jabberdomain to get the configuration of s2s.</li>
+   <li>Send a message with content "s2s blacklist" to b9@adminbot.jabberdomain to get the s2s blacklist.</li>
+   <li>Send a message with content "s2s blacklist add <jabberdomain>" to b9@adminbot.jabberdomain to add jabberdomain to s2s blacklist.</li>
+   <li>Send a message with content "s2s blacklist del <jabberdomain>" to b9@adminbot.jabberdomain to delete jabberdomain from s2s blacklist.</li>
+   <li>Send a message with content "s2s blacklist disable" to b9@adminbot.jabberdomain to disable s2s blacklist (and enable whitelist).</li>
+   <li>Send a message with content "s2s blacklist enable" to b9@adminbot.jabberdomain to enable s2s connections from any domain(except those in blacklist).</li>
+   <li>Send a message with content "s2s disable" to b9@adminbot.jabberdomain to disable s2s.</li>
+   <li>Send a message with content "s2s enable" to b9@adminbot.jabberdomain to enable s2s.</li>
+   <li>Send a message with content "s2s whitelist" to b9@adminbot.jabberdomain to get the s2s whitelist.</li>
+   <li>Send a message with content "s2s whitelist add <jabberdomain> [port]" to b9@adminbot.jabberdomain to add jabberdomain to s2s whitelist.</li>
+   <li>Send a message with content "s2s whitelist del <jabberdomain>" to b9@adminbot.jabberdomain to delete jabberdomain s2s whitelist.</li>
+   <li>Send a message with content "s2s whitelist disable" to b9@adminbot.jabberdomain to disable s2s whitelist and permit s2s connections from any domain(exceto those in blacklist).</li>
+   <li>Send a message with content "s2s whitelist enable" to b9@adminbot.jabberdomain to enable s2s whitelist.</li>
+   <li>Send a message with content "server sessions" to b9@adminbot.jabberdomain to get the number of incoming server sessions.</li>
+   <li>Send a message with content "total memory" to b9@adminbot.jabberdomain to get total available memory to the jvm.</li>
+   <li>Send a message with content "total users" to b9@adminbot.jabberdomain to get the number of total users.</li>
+   <li>Send a message with content "used memory" to b9@adminbot.jabberdomain to get used memory by the jvm.</li>
+   <li>Send a message with content "user info <user name>" to b9@adminbot.jabberdomain to get user informations.</li>
+   <li>Send a message with content "version" to b9@adminbot.jabberdomain to get plugin version.</li>
 </ul>
 
-<p>After version 0.2 you can open a connection to port 4455 and send the same messages to obtain data.</p>
-
+<h2>Known Issues</h2>
+<ul>
+   <li>Adding servers to s2s whitelist or blacklist does not valid informed hostname as valid name or valid IP (not yet).</li>
 </body>
 

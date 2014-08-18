@@ -32,12 +32,22 @@ import java.util.StringTokenizer;
 
 
 import org.dom4j.Element;
+import org.jivesoftware.openfire.admin.AdminManager;
 import org.jivesoftware.openfire.SessionManager;
 import org.jivesoftware.openfire.XMPPServer;
 import org.jivesoftware.openfire.container.Plugin;
 import org.jivesoftware.openfire.container.PluginManager;
+import org.jivesoftware.openfire.group.Group;
+import org.jivesoftware.openfire.group.GroupManager;
+import org.jivesoftware.openfire.handler.IQAuthHandler;
+import org.jivesoftware.openfire.muc.MUCRoom;
+import org.jivesoftware.openfire.muc.MultiUserChatManager;
+import org.jivesoftware.openfire.muc.MultiUserChatService;
+import org.jivesoftware.openfire.server.RemoteServerConfiguration;
+import org.jivesoftware.openfire.server.RemoteServerManager;
 import org.jivesoftware.openfire.user.User;
 import org.jivesoftware.openfire.user.UserManager;
+import org.jivesoftware.util.ParamUtils;
 import org.jivesoftware.util.JiveGlobals;
 import org.jivesoftware.util.PropertyEventDispatcher;
 import org.jivesoftware.util.PropertyEventListener;
@@ -71,10 +81,10 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
     private UserManager userManager;
 
     /**
-     * Constructs a new serverinfo plugin.
+     * Constructs a new b9 plugin.
      */
     public B9Plugin() {
-        serviceName = JiveGlobals.getProperty("plugin.serverinfo.serviceName", "serverinfo");
+        serviceName = JiveGlobals.getProperty("plugin.b9.serviceName", "adminbot");
     }
 
     // Plugin Interface
@@ -114,7 +124,7 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
                 Log.error(e.getMessage(), e);
             }
         }
-        serviceName = JiveGlobals.getProperty("plugin.serverinfo.serviceName", "");
+        serviceName = JiveGlobals.getProperty("plugin.b9.serviceName", "");
         componentManager = null;
         userManager = null;
         pluginManager = null;
@@ -183,7 +193,7 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
             String body = message.getBody();
 
             MyMessage MyMsg = new MyMessage();
-            String text = MyMsg.returnMessage(body);
+            String text = MyMsg.returnMessage(message);
 
             String xmppdomain = "@" + JiveGlobals.getProperty("xmpp.domain");
             String to = message.getFrom().toBareJID();
@@ -277,7 +287,7 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
     // Other Methods
 
     /**
-     * Returns the service name of this component, which is "serverinfo" by default.
+     * Returns the service name of this component, which is "b9" by default.
      *
      * @return the service name of this component.
      */
@@ -286,7 +296,7 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
     }
 
     /**
-     * Sets the service name of this component, which is "serverinfo" by default.
+     * Sets the service name of this component, which is "b9" by default.
      *
      * @param serviceName the service name of this component.
      */
@@ -304,7 +314,7 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 
     public void propertyDeleted(String property, Map<String, Object> params) {
         if (property.equals("plugin.b9.serviceName")) {
-            changeServiceName("b9");
+            changeServiceName("adminbot");
         }
     }
 
@@ -352,105 +362,804 @@ class MyMessage {
   private String msg =  "";
   private int msgTot = 0;
 
+  private GroupManager groupManager = GroupManager.getInstance();
   private UserManager userManager = UserManager.getInstance();
   private SessionManager sessionManager = SessionManager.getInstance();
   private XMPPServer xmppServer = XMPPServer.getInstance();
   private DecimalFormat mbFormat = new DecimalFormat("#0.00");
   private DecimalFormat mbIntFormat = new DecimalFormat("#0");
- 
-  public String returnMessage(String message) {
-	
-  	msg =  "Invalid command: " + message + ". Try again.";
+  private AdminManager adminManager = AdminManager.getInstance();
+  private Collection<Group> groups = groupManager.getGroups();
+  private Collection<User> users = userManager.getUsers();
 
-	Log.debug("ServerInfo - Command: " + message + ".");
+  private MultiUserChatManager multiUserChatManager = xmppServer.getMultiUserChatManager();
 
-	if ( message.equals("online users") ) 
-		{
-         		msg = "";
-			msgTot = sessionManager.getUserSessionsCount(true);
+  private String xmppdomain = JiveGlobals.getProperty("xmpp.domain");
+  private String s2sconfig = JiveGlobals.getProperty("xmpp.server.socket.active");
+  private String s2slconfig = JiveGlobals.getProperty("xmpp.server.permission");
+  private String s2scompression = JiveGlobals.getProperty("xmpp.server.compression.policy");
+  private String c2scompression = JiveGlobals.getProperty("xmpp.client.compression.policy");
+  private Collection<RemoteServerConfiguration> s2swl = RemoteServerManager.getAllowedServers();
+  private Collection<RemoteServerConfiguration> s2sbl = RemoteServerManager.getBlockedServers();
+  private IQAuthHandler authHandler = XMPPServer.getInstance().getIQAuthHandler();
+  private Boolean anonymousLogin = authHandler.isAnonymousAllowed();
 
-			Log.debug("ServerInfo - getUserSessionsCount: " + Integer.toString(msgTot) + ".");
-		}
 
-	else if ( message.equals("server sessions") ) 
-		{
-			msg= "";
-			msgTot = sessionManager.getIncomingServerSessionsCount(true);
+  public static boolean isNumeric(String str)  
+  {  
+    try  
+    {  
+      double d = Double.parseDouble(str);  
+    }  
+    catch(NumberFormatException nfe)  
+    {  
+      return false;  
+    }  
+    return true;  
+  }
 
-			Log.debug("ServerInfo - getIncomingServerSessionsCount: " + Integer.toString(msgTot) + ".");
-		}
+  public String returnMessage(Message messg) {
 
-	else if ( message.equals("total users") ) 
-		{
-			msg= "";
-			msgTot = 0;
 
-      			Collection<User> users = userManager.getUsers();
-      			for (User u : users)
+        String message = messg.getBody();
+  	String[] param = message.split(" ");
+
+        String to = messg.getFrom().toBareJID();
+
+	Log.debug("B9 - Verifying if user is admin.");
+
+	if (adminManager.isUserAdmin(messg.getFrom(),false)) {
+
+	  	msg =  "Invalid command: " + message + ". Try again.";
+
+		Log.debug("B9 - Command: " + message + ".");
+
+
+		if ( message.equals("online users") ) 
 			{
-				msgTot = msgTot + 1;
+         			msg = "";
+				msgTot = sessionManager.getUserSessionsCount(true);
 			}
 
-			Log.debug("ServerInfo - getUsers: " + Integer.toString(msgTot) + ".");
-		}
+		else if ( message.equals("help") )
 
-	else if ( message.equals("version") ) 
-		{
+			{ 
 
-			msg="ServerInfo version 0.3";
-		}
+				msg  = "Available commands:\r";
+				msg += "anonymous login\r";
+				msg += "anonymous login disable\r";
+				msg += "anonymous login enable\r";
+				msg += "c2s compression\r";
+				msg += "c2s compression disable\r";
+				msg += "c2s compression enable\r";
+				msg += "free memory\r";
+				msg += "group members <group name>\r";
+				msg += "help\r";
+				msg += "java version\r";
+				msg += "list conferences\r";
+				msg += "list groups\r";
+				msg += "max memory\r";
+				msg += "online users\r";
+				msg += "openfire version\r";
+				msg += "openfire host\r";
+				msg += "openfire uptime\r";
+				msg += "s2s compression\r";
+				msg += "s2s compression disable\r";
+				msg += "s2s compression enable\r";
+				msg += "s2s config\r";
+				msg += "s2s blacklist\r";
+				msg += "s2s blacklist add <host>\r";
+				msg += "s2s blacklist del <host>\r";
+				msg += "s2s blacklist disable\r";
+				msg += "s2s blacklist enable\r";
+				msg += "s2s enable\r";
+				msg += "s2s disable\r";
+				msg += "s2s whitelist\r";
+				msg += "s2s whitelist add <host> <port>\r";
+				msg += "s2s whitelist del <host>\r";
+				msg += "s2s whitelist disable\r";
+				msg += "s2s whitelist enable\r";
+				msg += "server sessions\r";
+				msg += "total memory\r";
+				msg += "total users\r";
+				msg += "used memory\r";
+				msg += "user config\r";
+				msg += "version\r";
+			}
 
-	else if ( message.equals("openfire version") ) 
-		{
+		else if ( message.equals("server sessions") ) 
+			{
+				msg= "";
+				msgTot = sessionManager.getIncomingServerSessionsCount(true);
 
-			msg="Openfire version: " + xmppServer.getServerInfo().getVersion().getVersionString();
-		}
+			}
 
-	else if ( message.equals("openfire host") ) 
-		{
+		else if ( message.equals("total users") ) 
+			{
+				msg= "";
+				msgTot = 0;
 
-			msg="Openfire hostname: " + xmppServer.getServerInfo().getHostname();
-		}
+      				for (User u : users)
+				{
+					msgTot = msgTot + 1;
+				}
 
-	else if ( message.equals("openfire uptime") ) 
-		{
+			}
 
-			msg="Openfire last started: " + xmppServer.getServerInfo().getLastStarted();
-		}
+		else if ( message.equals("version") ) 
+			{
 
-	else if ( message.equals("java version") )
-		{
+				msg="B9 version 0.1";
+			}
+
+		else if ( message.equals("openfire version") ) 
+			{
+
+				msg="Openfire version: " + xmppServer.getServerInfo().getVersion().getVersionString();
+			}
+
+		else if ( message.equals("openfire host") ) 
+			{
+
+				msg="Openfire hostname: " + xmppServer.getServerInfo().getHostname();
+			}
+
+		else if ( message.equals("openfire uptime") ) 
+			{
+
+				msg="Openfire last started: " + xmppServer.getServerInfo().getLastStarted();
+			}
+
+		else if ( message.equals("java version") )
+			{
 		
-			msg = "Java " + System.getProperty("java.version") + " " +System.getProperty("java.vendor") + " " + System.getProperty("java.vm.name");
+				msg = "Java " + System.getProperty("java.version") + " " +System.getProperty("java.vendor") + " " + System.getProperty("java.vm.name");
+			}
+
+		else if ( message.equals("total memory") )
+			{
+				msg = "Total available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().totalMemory())/1024)/1024)) + "MB";
+			}
+
+		else if ( message.equals("free memory") )
+			{
+				msg = "Total free available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().freeMemory())/1024)/1024)) + "MB";
+			}
+
+		else if ( message.equals("used memory") )
+			{
+				msg = "Total used memory by the JVM: " + mbFormat.format(((((Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()))/1024)/1024)) + "MB";
+			}
+
+	        else if ( message.equals("max memory") )
+        	        {
+                	        msg = "Total maximum available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().maxMemory())/1024)/1024)) + "MB";
+	                }
+
+		else if ( message.equals("list conferences") ) 
+			{
+
+			if ( multiUserChatManager.getMultiUserChatServicesCount() == 0 ) {
+
+				msg = "There is no conference service enabled.";
+			}
+			else
+			{
+				MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);
+
+				msg = "List of available conference rooms:";
+				
+				List<MUCRoom> mucRooms = multiUserChatService.getChatRooms();
+				for (MUCRoom mucRoom:  mucRooms)
+				{
+
+					msg += "\r" + mucRoom.getName();
+				}
+
+
+			}
+
+		}
+	
+		else if ( message.equals("list groups") ) 
+			{
+				String Groups = "";
+				msg= "";
+				msgTot = 0;
+
+      				for (Group group : groups)
+				{
+					msgTot = msgTot + 1;
+
+					if ( Groups != "" ) {
+
+						Groups += "\r";
+						}
+
+					Groups += group.getName();
+				}
+
+				msg = Integer.toString(msgTot) + " groups available in " + xmppdomain + "\r" + Groups;
+
+			}
+
+
+		else if ( message.startsWith("group members") ) 
+			{
+
+				String group = "";
+
+				if (param.length > 2) {
+
+					if (param.length == 3){
+
+						group = param[2];
+					}
+					else {
+
+						for (int i = 0; i < param.length; i++) {
+
+							if (i >1) {
+
+								if ( group != "" ) {
+									group += " ";
+								}
+
+								group += param[i];
+								}
+							}
+
+						}	
+
+					Boolean groupFound = false;
+					Group grp = new Group();
+
+                                	for (Group sgroup : groups)
+                                	{
+                                        	if ( sgroup.getName().equals(group) ) {
+							
+							grp = sgroup;
+							groupFound = true;
+						}
+                                	}
+
+					if ( !groupFound ) {
+
+						return "Group " + group + " not found.";
+					}
+					
+					String members = "";
+
+                                	Collection<JID> jids = grp.getMembers();
+                                	for (JID jid : jids)
+                                	{
+
+						members += jid.toBareJID() + "\r";
+                                	}
+
+					msg = "Group " + group + " member(s):\r";
+					msg += members;
+
+				}
+
+				else
+				{
+					return "You need to inform group name.";
+				}
+			
+			}
+
+		else if ( message.startsWith("user info") ) 
+			{
+
+				String group = "";
+
+				if (param.length > 2) {
+
+					String user = param[2];
+
+					Boolean userFound = false;
+					User usr = new User();
+
+                                	for (User suser : users)
+                                	{
+						msg += suser.getUsername()+".\r";
+                                        	if ( suser.getUsername().equals(user) ) {
+							
+							usr = suser;
+							userFound = true;
+						}
+                                	}
+
+					if ( !userFound ) {
+
+						return "User " + user + " not found.";
+					}
+					
+					msg = "User " + user + "\r";
+					msg += "Name: " + usr.getName() + "\r";
+					msg += "Email: " + usr.getEmail() + "\r";
+
+				}
+
+				else
+				{
+					return "You need to inform group name.";
+				}
+			
+			}
+
+		else if ( message.equals("s2s config") ) 
+			{
+
+			if ( s2sconfig.equals("true") ) {
+
+				msg = "Server to Server configuration enabled.\r";
+
+				
+				if ( s2slconfig.equals("blacklist") ) {
+
+					msg += "Any server can connect (except those in blacklist).";
+				}
+				else {
+					msg += " Whitelist enabled.";
+				}
+
+				return msg;
+			}
+			else {
+
+				return "s2s disabled.";
+			}
 		}
 
-	else if ( message.equals("total memory") )
+		else if ( message.equals("s2s enable") ) 
+			{
+
+			if ( s2sconfig.equals("true") ) {
+
+				msg = "Server to Server already enabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.server.socket.active","true");
+				return "Server to Server enabled.";
+			}
+		}
+
+		else if ( message.equals("s2s disable") ) 
+			{
+
+			if ( s2sconfig.equals("false") ) {
+
+				msg = "Server to Server already disabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.server.socket.active","false");
+				return "Server to Server disabled.";
+			}
+		}
+
+		else if ( message.equals("s2s compression") ) 
+			{
+
+			if ( s2scompression.equals("optional") ) {
+
+				return "s2s compression available.";
+			}
+			else {
+				return "s2s compression disabled.";
+			}
+
+		}
+
+		else if ( message.equals("s2s compression enable") ) 
+			{
+
+			if ( s2scompression.equals("optional") ) {
+
+				msg = "Server to Server compression already enabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.server.compression.policy","optional");
+				return "Server to Server compression enabled.";
+			}
+		}
+
+		else if ( message.equals("s2s compression disable") ) 
+			{
+
+			if ( s2scompression.equals("disabled") ) {
+
+				msg = "Server to Server compression already disabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.server.compression.policy","disabled");
+				return "Server to Server compression disabled.";
+			}
+		}
+
+
+		else if ( message.equals("c2s compression") ) 
+			{
+
+			if ( c2scompression.equals("optional") ) {
+
+				return "c2s compression available.";
+			}
+			else {
+				return "c2s compression disabled.";
+			}
+
+		}
+
+		else if ( message.equals("c2s compression enable") ) 
+			{
+
+			if ( c2scompression.equals("optional") ) {
+
+				msg = "Client to Server compression already enabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.client.compression.policy","optional");
+				return "Client to Server compression enabled.";
+			}
+		}
+
+		else if ( message.equals("c2s compression disable") ) 
+			{
+
+			if ( c2scompression.equals("disabled") ) {
+
+				msg = "Client to Server compression already disabled.";
+
+			}
+			else {
+
+				JiveGlobals.setProperty("xmpp.client.compression.policy","disabled");
+				return "Client to Server compression disabled.";
+			}
+		}
+
+
+		else if ( message.startsWith("s2s whitelist") ) 
+			{
+
+				if ( s2sconfig.equals("false") ) {
+
+					return "Server to Server disabled.";
+					}
+
+				if ( s2slconfig.equals("blacklist") ) {
+
+					msg = "Whitelist disabled.\r";
+					}
+				else {
+					msg = "Whitelist enabled.\r";
+					}
+
+				msg += "Server(s) in whitelist:";
+
+				if ( param.length == 2 ) {
+
+                                	for (RemoteServerConfiguration server : s2swl)
+                                	{
+
+
+                                        	msg += "\r" + server.getDomain()+":"+Integer.toString(server.getRemotePort());
+                                	}
+
+				}
+				else {
+
+					String s2scmd = param[2];
+
+                                        if ( s2scmd.equals("add") || s2scmd.equals("del") || s2scmd.equals("enable") || s2scmd.equals("disable") ) {
+
+						if ( s2scmd.equals("enable") || s2scmd.equals("disable") ) {
+
+							if ( s2scmd.equals("enable") ) {
+
+								if ( s2slconfig.equals("whitelist") ) {
+
+									return "Whitelist already enabled.";
+								}
+								else {
+
+									RemoteServerManager.setPermissionPolicy("whitelist");
+									return "Whitelist enabled.";
+								}
+							}
+							else {
+
+								if ( s2slconfig.equals("blacklist") ) {
+
+									return "Whitelist already disabled.";
+								}
+								else {
+
+									RemoteServerManager.setPermissionPolicy("blacklist");
+									return "Whitelist disabled.";
+									}
+							
+							}
+						}
+						else {
+
+							String s2shost = "";
+							int s2sport = 5269;
+
+							if ( param.length < 4) {
+
+								return "You need to inform at least server hostname or IP.";
+								}
+
+
+							if ( s2scmd.equals("add") ) {
+
+								if ( param.length  > 4 ) {
+
+									if ( !isNumeric (param[4]) ) {
+
+										return "You need to inform a valid port.";
+									}
+
+									if ( Integer.valueOf(param[4]) < 0 || Integer.valueOf(param[4]) > 65535) {
+										return "You need to inform a valid port.";
+									}
+	
+									s2sport = Integer.valueOf(param[4]);
+									}
+		
+								s2shost = param[3];
+
+								RemoteServerConfiguration remoteServerConfiguration = new RemoteServerConfiguration(s2shost);
+								remoteServerConfiguration.setRemotePort(s2sport);
+					
+								RemoteServerManager.allowAccess(remoteServerConfiguration);
+								return "Server " + s2shost + ":" + s2sport + " added to s2s whitelist.";
+								}
+							else {
+								s2shost = param[3];
+								Boolean s2swlin=false;
+                        	                		for (RemoteServerConfiguration server : s2swl)
+                                	        		{
+
+									if ( server.getDomain().equals(s2shost) ) {
+
+										s2swlin=true;
+									}
+								}
+
+								if ( !s2swlin ) {
+						
+									return "Server " + s2shost + " is not in whitelist.";
+								}
+
+								RemoteServerManager.deleteConfiguration(s2shost);
+								return "Server " + s2shost + " removed from s2s whitelist.";
+
+							}
+						}
+
+
+					}
+					else {
+
+						return "Command " + s2scmd + " invalid. Try again.";
+					}
+
+
+				}
+
+				return msg;
+
+			}
+
+		else if ( message.startsWith("s2s blacklist") ) 
+			{
+
+				if ( s2sconfig.equals("false") ) {
+
+					return "Server to Server disabled.";
+					}
+
+				if ( s2slconfig.equals("whitelist") ) {
+
+					msg = "Blacklist disabled.\r";
+					}
+				else {
+					msg = "Blacklist enabled.\r";
+					}
+
+				msg += "Server(s) in blacklist:";
+
+				if ( param.length == 2 ) {
+
+                                	for (RemoteServerConfiguration server : s2sbl)
+                                	{
+
+
+                                        	msg += "\r" + server.getDomain();
+                                	}
+
+				}
+				else {
+
+					String s2scmd = param[2];
+
+                                        if ( s2scmd.equals("add") || s2scmd.equals("del") || s2scmd.equals("enable") || s2scmd.equals("disable") ) {
+
+                                                if ( s2scmd.equals("enable") || s2scmd.equals("disable") ) {
+
+                                                        if ( s2scmd.equals("enable") ) {
+
+                                                                if ( s2slconfig.equals("blacklist") ) {
+
+                                                                        return "Blacklist already enabled.";
+                                                                }
+                                                                else {
+
+                                                                        RemoteServerManager.setPermissionPolicy("blacklist");
+                                                                        return "Blacklist enabled.";
+                                                                }
+                                                        }
+                                                        else {
+
+                                                                if ( s2slconfig.equals("whitelist") ) {
+
+                                                                        return "Blacklist already disabled.";
+                                                                }
+                                                                else {
+
+                                                                        RemoteServerManager.setPermissionPolicy("whitelist");
+                                                                        return "Blacklist disabled.";
+                                                                        }
+
+                                                        }
+						}
+						else {
+					
+							String s2shost = "";
+
+							if ( param.length < 4) {
+
+								return "You need to inform at least server hostname or IP.";
+							}
+
+							if ( s2scmd.equals("add") ) {
+
+								s2shost = param[3];
+
+								RemoteServerManager.blockAccess(s2shost);
+								return "Server " + s2shost + " added to s2s blacklist.";
+								}
+							else {
+								s2shost = param[3];
+								Boolean s2sblin=false;
+                                        			for (RemoteServerConfiguration server : s2sbl)
+	                                        		{
+
+									if ( server.getDomain().equals(s2shost) ) {
+
+										s2sblin=true;
+									}
+								}
+
+								if ( !s2sblin ) {
+						
+									return "Server " + s2shost + " is not in blacklist.";
+								}
+
+								RemoteServerManager.deleteConfiguration(s2shost);
+								return "Server " + s2shost + " removed from s2s blacklist.";
+
+							}
+						}
+					}
+					else {
+
+						return "Command " + s2scmd + " invalid. Try again.";
+					}
+
+
+				}
+
+				return msg;
+
+			}
+
+
+		else if ( message.startsWith("anonymous login") ) 
+			{
+
+			if ( param.length == 2 ) {
+
+				if ( anonymousLogin ) {
+
+					return "Anonymous login permitted.";
+					}
+				else 
+				{
+					return "Anonymous login forbidden.";
+				}
+			}
+			else 
+			{
+
+				String s2scmd = param[2];
+
+				if ( s2scmd.equals("enable") || s2scmd.equals("disable") ) {
+
+					if ( s2scmd.equals("enable") ) {
+
+                                        	if ( anonymousLogin ) {
+
+							return "Anonymous login already permitted.";
+                                                 }
+                                                 else {
+
+			        			try {
+                                                        	authHandler.setAllowAnonymous(true);
+							}
+        						catch (Exception e) {
+            							Log.error(e.getMessage(), e);
+        						}
+
+							return "Anonymous login permitted.";
+                                                 }
+                                         }
+                                         else 
+					 {
+					 	if ( ! anonymousLogin ) {
+
+                                                	return "Anonymous login already forbidden.";
+                                                }
+                                                else 
+						{
+			        			try {
+                                                        	authHandler.setAllowAnonymous(false);
+							}
+        						catch (Exception e) {
+            							Log.error(e.getMessage(), e);
+        						}
+
+							return "Anonymous login forbidden.";
+                                                 }
+					}
+
+				}
+				else
+				{
+
+                                	return "Command " + s2scmd + " invalid. Try again.";
+				}
+			}
+		}
+ 
+
+		if ( msg.equals("") ) {
+			return Integer.toString(msgTot);
+		}
+		else
 		{
-			msg = "Total available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().totalMemory())/1024)/1024)) + "MB";
+			return msg;
 		}
-
-	else if ( message.equals("free memory") )
-		{
-			msg = "Total free available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().freeMemory())/1024)/1024)) + "MB";
-		}
-
-	else if ( message.equals("used memory") )
-		{
-			msg = "Total used memory by the JVM: " + mbFormat.format(((((Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()))/1024)/1024)) + "MB";
-		}
-
-        else if ( message.equals("max memory") )
-                {
-                        msg = "Total maximum available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().maxMemory())/1024)/1024)) + "MB";
-                }
-
-	if ( msg.equals("") ) {
-		return Integer.toString(msgTot);
 	}
+	
 	else
-	{
-		return msg;
-	}
+		{
+		return "JID " + to + " is not an Openfire Administrator.";
+		}
   }
 }
 
