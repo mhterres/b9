@@ -513,7 +513,7 @@ class MyMessage {
 
 			else if ( message.equals("version") ) {
 
-			msg="B9 version 0.2";
+			msg="B9 version 0.2.1";
 			}
 
 			else if ( message.equals("openfire version") ) {

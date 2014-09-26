@@ -5,15 +5,7 @@
    <name>B9</name>
    <description>Openfire Administration bot.</description>
    <author>Marcelo Hartmann Terres</author>
-   <version>0.2</version>
-   <date>08/26/2014</date>
+   <version>0.2.1</version>
+   <date>09/26/2014</date>
    <minServerVersion>3.8.0</minServerVersion>
-
-   <adminconsole>
-      <tab id="tab-users">
-         <sidebar id="sidebar-users">
-            <item id="b9-form" name="Administration Bot" url="b9-form.jsp" description="Administration Bot" />
-         </sidebar>
-      </tab>
-   </adminconsole>
 </plugin>
