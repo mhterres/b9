@@ -46,7 +46,7 @@
 </p>
 
 <h2>Installation</h2>
-<p>Use console admin to upload the plugin or copy the b9.jar into the plugins directory of your Openfire installation. The plugin will then be automatically deployed. To upgrade to a new version, copy the new b9.jar file over the existing file or use console admin.</p>
+<p>Use console admin to upload the plugin or copy the b9.jar into the plugins directory of your Openfire installation. The plugin will then be automatically deployed. To upgrade to a new version, copy the new b9.jar file over the existing file or use console admin (in this case, first remove the old plugin version).</p>
 
 <h2>Using the Plugin</h2>
 <ul>
@@ -56,6 +56,8 @@
    <li>Send a message with content "c2s compression" to b9@adminbot.jabberdomain to get the configuration of c2s compression.</li>
    <li>Send a message with content "c2s compression disable" to b9@adminbot.jabberdomain to disable c2s compression.</li>
    <li>Send a message with content "c2s compression enable" to b9@adminbot.jabberdomain to enable c2s compression.</li>
+   <li>Send a message with content "create conference <room name> [members]" to b9@adminbot.jabberdomain to create a new conference room and send invitations to <members> (JIDs separated by commas), if informed.</li>
+   <li>Send a message with content "invite conference <room name> <members>" to b9@adminbot.jabberdomain to send invitations to <members> (JIDs separated by commas).</li>
    <li>Send a message with content "free memory" to b9@adminbot.jabberdomain to get free available memory to the jvm.</li>
    <li>Send a message with content "group members <group name>" to b9@adminbot.jabberdomain to get the list of members of a group.</li>
    <li>Send a message with content "help" to b9@adminbot.jabberdomain to get the list of available commands.</li>
@@ -91,8 +93,24 @@
    <li>Send a message with content "version" to b9@adminbot.jabberdomain to get plugin version.</li>
 </ul>
 
+<h2>Connection via socket</h2>
+<p>After version 0.3 you can open a connection on localhost port 4456 (default values) and send the same messages to obtain data.</p>
+<p>To use socket connections you must enable the feature in plugin configuration page on console admin (default is disabled). In the same page you can change default port and ip address for binding.</p>
+
+<h2>Access restrictions</h2>
+
+<h3>XMPP Messages</h3>
+Only JIDs listed as admins can send XMPP messages to B9 plugin.
+
+<h3>Socket Connections</h3>
+If you are using socket connections, first you have to login with your password (defined in plugin configuration page on console admin). You just need to send the command:
+<pre>login secret</pre>
+Where secret is your defined password.
+
+After login you can send the same messages that you use in XMPP.
+
 <h2>Known Issues</h2>
 <ul>
-   <li>Adding servers to s2s whitelist or blacklist does not valid informed hostname as valid name or valid IP (not yet).</li>
+   <li>Adding servers to s2s whitelist or blacklist does not validate hostname as a valid name or valid IP address (not yet).</li>
 </body>
 

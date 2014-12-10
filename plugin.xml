@@ -5,7 +5,16 @@
    <name>B9</name>
    <description>Openfire Administration bot.</description>
    <author>Marcelo Hartmann Terres</author>
-   <version>0.2.1</version>
-   <date>09/26/2014</date>
+   <version>0.3</version>
+   <date>12/10/2014</date>
    <minServerVersion>3.8.0</minServerVersion>
+
+   <adminconsole>
+        <tab id="tab-server">
+            <sidebar id="sidebar-server-settings">
+            	<item id="b9-form" name="B9 Properties" url="b9-form.jsp" description="Settings for B9" />
+            </sidebar>
+      </tab>
+   </adminconsole>
 </plugin>
+

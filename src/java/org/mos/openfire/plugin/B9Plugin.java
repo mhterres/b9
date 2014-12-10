@@ -74,11 +74,27 @@ import org.xmpp.packet.Presence;
 */
 public class B9Plugin implements Plugin, Component, PropertyEventListener {
 
+	private static final String B9SOCKETENABLED_PROP = "plugin.b9.socketenabled";
+	private static final String B9PORT_PROP = "plugin.b9.port";
+	private static final String B9IP_PROP = "plugin.b9.ip";
+	private static final String B9PASSWORD_PROP = "plugin.b9.password";
+
 	private String serviceName;
 	private SessionManager sessionManager;
 	private ComponentManager componentManager;
 	private PluginManager pluginManager;
 	private UserManager userManager;
+	private AdminManager adminManager = AdminManager.getInstance();
+
+        private Socket socket = null;
+        private ServerSocket server = null;
+        private DataInputStream streamIn =  null;
+        private B9D_Server b9d_srv = new B9D_Server();
+        public static Thread ofThread;
+        public static Boolean NotExit = true;
+        public static String b9Port = JiveGlobals.getProperty(B9PORT_PROP, "4456");
+        public static String b9IP = JiveGlobals.getProperty(B9IP_PROP, "127.0.0.1");
+	public static Boolean b9SocketEnabled = JiveGlobals.getBooleanProperty(B9SOCKETENABLED_PROP, false);
 
 	/**
 	* Constructs a new b9 plugin.
@@ -113,7 +129,14 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 		}
 
 		PropertyEventDispatcher.addListener(this);
-	}
+
+		if (b9SocketEnabled) {
+                	Log.info("B9 - Starting bind on port " + b9Port + ".");
+                	Log.debug("B9 - Starting bind on port " + b9Port + ".");
+                	b9d_srv.startServer();
+		}
+        }
+
 
 	public void destroyPlugin() {
 
@@ -143,7 +166,48 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 
 		Log.info("B9 - Closing plugin.");
 		Log.debug("B9 - Closing plugin.");
+
+		if (b9SocketEnabled) {
+
+                	clientConnect();
+                	B9Plugin.NotExit=false;
+                	B9Plugin.ofThread.stop();
+                	Log.info("B9 - Thread closed.");
+                	Log.debug("B9 - Thread closed.");
+		}
 	}
+
+	public void setSocketEnabled(boolean socketenabled) {
+		JiveGlobals.setProperty(B9SOCKETENABLED_PROP, socketenabled ? Boolean.toString(true) : Boolean.toString(false));
+	}
+
+	public boolean isEnabled() {
+		return JiveGlobals.getBooleanProperty(B9SOCKETENABLED_PROP, false);
+	}
+
+	public void setPort(String port) {
+      		JiveGlobals.setProperty(B9PORT_PROP, port);
+	}
+
+	public String getPort() {
+		return JiveGlobals.getProperty(B9PORT_PROP, "4456");
+	}
+
+	public void setIP(String IP) {
+		JiveGlobals.setProperty(B9IP_PROP, IP);
+	}
+
+	public String getIP() {
+		 return JiveGlobals.getProperty(B9IP_PROP, "127.0.0.1");
+	}
+	public void setPassword(String Password) {
+		JiveGlobals.setProperty(B9PASSWORD_PROP, Password);
+	}
+
+	public String getPassword() {
+		 return JiveGlobals.getProperty(B9PASSWORD_PROP, "2mQG7foh");
+	}
+
 
 	public void initialize(JID jid, ComponentManager componentManager) {
 	}	
@@ -155,7 +219,38 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 
  		Log.info("B9 - Shutdown thread.");
  		Log.debug("B9 - Shutdown thread.");
+
+                if (b9SocketEnabled) {
+
+                        clientConnect();
+                        B9Plugin.NotExit=false;
+                        B9Plugin.ofThread.stop();
+                        Log.info("B9 - Thread closed.");
+                        Log.debug("B9 - Thread closed.");
+                }
 	}
+
+        public void clientConnect() {
+
+                try {
+                        Log.info("B9 - Making local connection.");
+                        Log.debug("B9 - Making local connection no port " + b9Port + ".");
+                        Socket clientSocket = new Socket(b9IP,Integer.parseInt(b9Port));
+                        DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+
+                        Log.debug("B9 - Send disconnect commando to local server.");
+                        outToServer.writeBytes(".\n");
+                        clientSocket.close();
+                }
+                catch (UnknownHostException e) {
+
+                        Log.error(e.getMessage(), e);
+                }
+                catch (IOException e) {
+
+                        Log.error(e.getMessage(), e);
+                }
+        }
 
 	// Component Interface
 
@@ -220,13 +315,28 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 			String to = message.getFrom().toBareJID();
 			String body = message.getBody();
 			String xmppdomain = "@" + JiveGlobals.getProperty("xmpp.domain");
+			String text="";
+			Boolean authUse = false;
 
 			Log.debug("B9 - Message received");
 			Log.debug("B9 - Original message from: " + to);
 			Log.debug("B9 - Original message body: " + body);
 
-			MyMessage MyMsg = new MyMessage();
-			String text = MyMsg.returnMessage(message);
+			MyMessage_B9 MyMsg = new MyMessage_B9();
+
+                        Log.debug("B9 - Processing message received.");
+                        Log.debug("B9 - Verifying user access.");
+
+			if (!adminManager.isUserAdmin(message.getFrom(),false)) {
+
+				Log.debug("B9 - JID " + message.getFrom() + " is not admin.");
+				text="JID " + to + " is not an Openfire Administrator.";
+			}
+			else {
+			
+				Log.debug("B9 - JID " + message.getFrom() + " is admin.");
+				text = MyMsg.returnMessage(body,"XMPP");
+			}
 
 			Message newMessage = new Message();
 			newMessage.setTo(to);
@@ -427,11 +537,186 @@ public class B9Plugin implements Plugin, Component, PropertyEventListener {
 		}
 }
 
+class B9D_Server {
 
-class MyMessage {
+        private static final String B9PORT_PROP = "plugin.b9.port";
+        private static final String B9IP_PROP = "plugin.b9.ip";
+
+        public static void main(String[] args) {
+
+                Log.info("B9 - Running startServer.");
+                Log.debug("B9 - Running startServer.");
+
+                new B9D_Server().startServer();
+        }
+
+        public void startServer() {
+
+                Runnable serverTask = new Runnable() {
+                @Override
+                public void run() {
+
+                        String b9Port = JiveGlobals.getProperty(B9PORT_PROP, "4456");
+                        String b9IP = JiveGlobals.getProperty(B9IP_PROP, "127.0.0.1");
+			Boolean authUse = false;
+
+                        try {
+
+                                Log.info("B9 - Opening socket in IP " + b9IP + " port " + b9Port + ".");
+                                Log.debug("B9 - Opening socket in IP " + b9IP + " port " + b9Port + ".");
+                                ServerSocket serverSocket = new ServerSocket(Integer.parseInt(b9Port),1,InetAddress.getByName(b9IP));
+                                Log.info("B9 - Waiting for connection.");
+                                Log.debug("B9 - Listen on IP " + b9IP + " port " + b9Port  + ".");
+                                Log.debug("Waiting for connection.");
+
+                                while (B9Plugin.NotExit) {
+
+                                        Socket clientSocket = serverSocket.accept();
+                                        String input="";
+                                        String line;
+
+                                        try {
+
+                                                // Get input from the client
+                                                DataInputStream in = new DataInputStream (clientSocket.getInputStream());
+                                                PrintStream out = new PrintStream(clientSocket.getOutputStream());
+
+                                                input = "";
+						String text="";
+
+                                                while((line = in.readLine()) != null && !line.equals(".")) {
+
+                                                        input=input + line;
+                                                        MyMessage_B9 MyMsg = new MyMessage_B9();
+                                                        Log.debug("B9 - Receive socket message: " + input);
+
+							if (!authUse) {
+				
+								
+								Integer Result = verifyAuth(input);
+
+
+								switch (Result) {
+
+									case 0:
+										text="You are now identified and can send commands";
+										authUse=true;
+										break;
+									case 1:
+										text="First you need to identify yourself using commando: login <secret>";
+										break;
+
+									case 2:
+										text="You need to inform secret";
+										break;
+
+									case 3:
+										text="Invalid secret";
+										break;
+
+								}
+							}
+
+							else {
+								
+                                                        	text = MyMsg.returnMessage(input,"TELNET");
+							}
+
+                                                        out.println(text);
+                                                        input = "";
+
+                                                        if (!B9Plugin.NotExit) {
+
+                                                                Log.info("B9 - Receive signal to close thread.");
+                                                                Log.debug("B9 - Receive signal to close thread.");
+                                                                break;
+                                                        }
+                                                }
+
+                                                clientSocket.close();
+                                        } catch (IOException ioe) {
+
+                                                Log.error("B9 - IOException on socket listen: " + ioe);
+                                                ioe.printStackTrace();
+                                        }
+
+                                }
+
+                                Log.info("B9 - Thread closing.");
+                                Log.debug("B9 - Thread closing.");
+                        }
+                        catch (IOException e) {
+
+                                Log.error("B9 - Unable to process client request");
+                                e.printStackTrace();
+                        }
+                }
+        };
+
+        B9Plugin.ofThread = new Thread(serverTask);
+        B9Plugin.ofThread.start();
+        Log.info("B9 - Thread Created.");
+        Log.debug("B9 - Thread Created.");
+
+        }
+
+	public Integer verifyAuth(String message) {
+
+		String[] param = message.split(" ");
+        	String b9Password = JiveGlobals.getProperty("plugin.b9.password", "Sd2E9hAvs9LBLcbDVtHsigoP8sAFx6FS");
+
+		Log.debug("B9 - Processing message received.");
+		Log.debug("B9 - Verifying user access.");
+
+
+		if (param[0].equals("login")) {
+
+			if (param.length < 2) {
+
+				//"You need to inform secret"
+				return 2;
+			}
+			else {
+
+				if (param[1].equals(b9Password)) {
+
+					//"You are now identified and can send commands"
+					return 0;	
+				}
+				else {
+
+					//"Invalid secret"
+					return 3;
+				}
+			}
+		}
+
+		else {
+
+			//"First you need to identify yourself using commando: login <secret>"
+			return 1;
+		}
+				
+	}
+
+}
+
+
+
+
+
+class MyMessage_B9 {
 
 	private String msg =  "";
 	private int msgTot = 0;
+
+	private String conf_roomname = "";
+	private String[] conf_members = new String[] {};
+	private String conf_listmembers = "";
+	private int conf_members_count = 0;
+
+	private MUCRoom conf_room;
+	private String inviteErrors = "";
 
 	private GroupManager groupManager = GroupManager.getInstance();
 	private UserManager userManager = UserManager.getInstance();
@@ -439,11 +724,11 @@ class MyMessage {
 	private XMPPServer xmppServer = XMPPServer.getInstance();
 	private DecimalFormat mbFormat = new DecimalFormat("#0.00");
 	private DecimalFormat mbIntFormat = new DecimalFormat("#0");
-	private AdminManager adminManager = AdminManager.getInstance();
 	private Collection<Group> groups = groupManager.getGroups();
 	private Collection<User> users = userManager.getUsers();
 
 	private MultiUserChatManager multiUserChatManager = xmppServer.getMultiUserChatManager();
+	private MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);
 
 	private String xmppdomain = JiveGlobals.getProperty("xmpp.domain");
 	private IQAuthHandler authHandler = XMPPServer.getInstance().getIQAuthHandler();
@@ -465,403 +750,545 @@ class MyMessage {
 		return true;  
 	}
 
-	public String returnMessage(Message messg) {
+	public String returnMessage(String message,String TypeMessage) {
 
-		String message = messg.getBody();
+		String msg = "";
 		String[] param = message.split(" ");
+		String linebreak="\r\n";
 
-		String to = messg.getFrom().toBareJID();
+		if (TypeMessage.equals("XMPP")) {
+
+			linebreak="\r";
+		}
 
 		Log.debug("B9 - Processing message received.");
 
-		Log.debug("B9 - Verifying if user is admin.");
+  		msg =  "Invalid command: " + message + ". Try again.";
 
-		if (adminManager.isUserAdmin(messg.getFrom(),false)) {
+		Log.debug("B9 - Processing command: " + message + ".");
 
-	  		msg =  "Invalid command: " + message + ". Try again.";
+		if ( message.equals("online users") )  {
 
-			Log.debug("B9 - JID " + messg.getFrom() + " is admin.");
-			Log.debug("B9 - Processing command: " + message + ".");
+			msg = "";
+			msgTot = sessionManager.getUserSessionsCount(true);
+		}
 
-			if ( message.equals("online users") )  {
+		else if ( message.equals("help") ) { 
 
-				msg = "";
-				msgTot = sessionManager.getUserSessionsCount(true);
+			msg = ProcessCmd_help(linebreak);
+		}
+
+		else if ( message.equals("server sessions") ) {
+
+			msg= "";
+			msgTot = sessionManager.getIncomingServerSessionsCount(true);
+		}
+
+		else if ( message.equals("total users") ) {
+
+			msg= "";
+			msgTot = 0;
+
+			for (User u : users) {
+
+				msgTot = msgTot + 1;
 			}
+		}
 
-			else if ( message.equals("help") ) { 
+		else if ( message.equals("version") ) {
 
-				msg = ProcessCmd_help();
-			}
+			msg="B9 version 0.3";
+		}
 
-			else if ( message.equals("server sessions") ) {
+		else if ( message.equals("openfire version") ) {
 
-				msg= "";
-				msgTot = sessionManager.getIncomingServerSessionsCount(true);
-			}
+			msg="Openfire version: " + xmppServer.getServerInfo().getVersion().getVersionString();
+		}
 
-			else if ( message.equals("total users") ) {
+		else if ( message.equals("openfire host") ) {
 
-				msg= "";
-				msgTot = 0;
+			msg="Openfire hostname: " + xmppServer.getServerInfo().getHostname();
+		}
 
-				for (User u : users) {
+		else if ( message.equals("openfire uptime") ) {
 
-					msgTot = msgTot + 1;
-				}
-			}
+			msg="Openfire last started: " + xmppServer.getServerInfo().getLastStarted();
+		}
 
-			else if ( message.equals("version") ) {
-
-			msg="B9 version 0.2.1";
-			}
-
-			else if ( message.equals("openfire version") ) {
-
-				msg="Openfire version: " + xmppServer.getServerInfo().getVersion().getVersionString();
-			}
-
-			else if ( message.equals("openfire host") ) {
-
-				msg="Openfire hostname: " + xmppServer.getServerInfo().getHostname();
-			}
-
-			else if ( message.equals("openfire uptime") ) {
-
-				msg="Openfire last started: " + xmppServer.getServerInfo().getLastStarted();
-			}
-
-			else if ( message.equals("java version") ) {
+		else if ( message.equals("java version") ) {
 		
-				msg = "Java " + System.getProperty("java.version") + " " +System.getProperty("java.vendor") + " " + System.getProperty("java.vm.name");
-			}
+			msg = "Java " + System.getProperty("java.version") + " " +System.getProperty("java.vendor") + " " + System.getProperty("java.vm.name");
+		}
 
-			else if ( message.equals("total memory") ) {
+		else if ( message.equals("total memory") ) {
 
-				msg = "Total available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().totalMemory())/1024)/1024)) + "MB";
-			}
+			msg = "Total available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().totalMemory())/1024)/1024)) + "MB";
+		}
 
-			else if ( message.equals("free memory") ) {
+		else if ( message.equals("free memory") ) {
 
-				msg = "Total free available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().freeMemory())/1024)/1024)) + "MB";
-			}
+			msg = "Total free available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().freeMemory())/1024)/1024)) + "MB";
+		}
 
-			else if ( message.equals("used memory") ) {
+		else if ( message.equals("used memory") ) {
 
-				msg = "Total used memory by the JVM: " + mbFormat.format(((((Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()))/1024)/1024)) + "MB";
-			}
+			msg = "Total used memory by the JVM: " + mbFormat.format(((((Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()))/1024)/1024)) + "MB";
+		}
 
-			else if ( message.equals("max memory") ) {
+		else if ( message.equals("max memory") ) {
 
-				msg = "Total maximum available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().maxMemory())/1024)/1024)) + "MB";
-			}
+			msg = "Total maximum available memory to the JVM: " + mbFormat.format((((Runtime.getRuntime().maxMemory())/1024)/1024)) + "MB";
+		}
 
-			else if ( message.equals("list conferences") ) {
 
-				if ( multiUserChatManager.getMultiUserChatServicesCount() == 0 ) {
+		else if ( message.startsWith("create conference") ) {
 
-					msg = "There is no conference service enabled.";
+			if (param.length > 2) {
+
+				conf_roomname = param[2];
+
+				if (param.length < 4) {
+
+					conf_members_count=0;
 				}
-
 				else {
 
-					MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);
+					conf_listmembers=param[3];
 
-					msg = "List of available conference rooms:";
-				
-					List<MUCRoom> mucRooms = multiUserChatService.getChatRooms();
-
-					for (MUCRoom mucRoom:  mucRooms) {
-
-						msg += "\r" + mucRoom.getName();
-					}
-				}
-			}
-	
-			else if ( message.equals("list groups") ) {
-
-				String Groups = "";
-				msg= "";
-				msgTot = 0;
-
-	  			for (Group group : groups) {
-
-					msgTot = msgTot + 1;
-
-					if ( Groups != "" ) {
-
-						Groups += "\r";
-					}
-
-					Groups += group.getName();
+					conf_members=conf_listmembers.split(",");
+					conf_members_count=conf_members.length;
 				}
 
-				msg = Integer.toString(msgTot) + " groups available in " + xmppdomain + "\r" + Groups;
-			}
+				MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);  
+
+		                Log.info("B9 - Creating conference room " + conf_roomname + ".");
+
+				try {
+
+					conf_room=multiUserChatService.getChatRoom(conf_roomname, xmppServer.createJID(conf_roomname, null));
+					conf_room.unlock(conf_room.getRole());  
+				}
+				catch(Exception e) {
+
+					Log.error(e.getMessage(), e);
+					msg="Can't create conference room " + conf_roomname + ".";
+				}
+
+				try {
+
+					conf_room.unlock(conf_room.getRole());  
+				}
+				catch(Exception e) {
+
+					Log.error(e.getMessage(), e);
+					msg="Can't unlock conference room " + conf_roomname + ".";
+				}
 
 
-			else if ( message.startsWith("group members") ) {
+				if (conf_members_count > 0) {
 
-				String group = "";
+					for(String conf_jid : conf_members) {
 
-				if (param.length > 2) {
-
-					if (param.length == 3) {
-
-						group = param[2];
-					}
-
-					else {
-
-						for (int i = 0; i < param.length; i++) {
-
-							if (i >1) {
-
-								if ( group != "" ) {
-
-									group += " ";
-								}
-
-								group += param[i];
-							}
-						}
-					}	
-
-					Boolean groupFound = false;
-					Group grp = new Group();
-
-				   	for (Group sgroup : groups) {
+						String[] conf_member_jid_items=conf_jid.split("@");
 	
-						if ( sgroup.getName().equals(group) ) {
-							
-							grp = sgroup;
-							groupFound = true;
+						JID conf_member_jid=xmppServer.createJID(conf_member_jid_items[0],null);
+
+		                		Log.info("B9 - Sending invitation to " + conf_jid + " to join conference room " + conf_roomname + ".");
+
+						try {
+
+							conf_room.sendInvitation(conf_member_jid, null, conf_room.getRole(), null);  
+						}
+						catch(Exception e) {
+
+                                               		Log.error(e.getMessage(), e);
 						}
 					}
+				}
 
-					if ( !groupFound ) {
+				msg="Conference room " + conf_roomname + " created.";
 
-						return "Group " + group + " not found.";
-					}
+			}
+			else {
+
+				msg="You need to inform at least conference room name.";
+			}
+		}
+
+		else if ( message.startsWith("invite conference") ) {
+
+
+			if (param.length == 4 ) {
+
+				conf_roomname = param[2];
+
+				conf_listmembers=param[3];
+
+				conf_members=conf_listmembers.split(",");
+				conf_members_count=conf_members.length;
+
+				MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);  
+
+				try {
+					conf_room=multiUserChatService.getChatRoom(conf_roomname);
+				}
+				catch(Exception e) {
+
+					Log.error(e.getMessage(), e);
+					msg="Can't access conference room " + conf_roomname + ".";
+				}
+
+				if (conf_room == null) {
+
+					msg="Conference room " + conf_roomname + " does not exists.";
+				}
+
+				try {
 					
-					String members = "";
+					conf_room.unlock(conf_room.getRole());  
+				}
+				catch(Exception e) {
 
-					Collection<JID> jids = grp.getMembers();
+					Log.error(e.getMessage(), e);
+					msg="Can't unlock conference room " + conf_roomname + ".";
+				}
 
-					for (JID jid : jids) {
+				for(String conf_jid : conf_members) {
 
-						members += jid.toBareJID() + "\r";
+					String[] conf_member_jid_items=conf_jid.split("@");
+
+					JID conf_member_jid=xmppServer.createJID(conf_member_jid_items[0],null);
+
+	                		Log.info("B9 - Sending invitation to " + conf_jid + " to join conference room " + conf_roomname + ".");
+					try {
+
+						conf_room.sendInvitation(conf_member_jid, null, conf_room.getRole(), null);  
 					}
+                                       	catch(Exception e) {
 
-					msg = "Group " + group + " member(s):\r";
-					msg += members;
-				}
+                                       		Log.error(e.getMessage(), e);
 
-				else {
+						if (inviteErrors.equals("")) {
 
-					return "You need to inform group name.";
-				}
-			}
-
-			else if ( message.startsWith("user info") )  {
-
-				String group = "";
-
-				if (param.length > 2) {
-
-					String user = param[2];
-
-					Boolean userFound = false;
-					User usr = new User();
-
-				   	for (User suser : users) {
-
-						msg += suser.getUsername()+".\r";
-
-						if ( suser.getUsername().equals(user) ) {
-							
-							usr = suser;
-							userFound = true;
+							inviteErrors += conf_jid;
 						}
-					}					
-
-					if ( !userFound ) {
-
-						return "User " + user + " not found.";
-					}
-					
-					msg = "User " + user + "\r";
-					msg += "Name: " + usr.getName() + "\r";
-					msg += "Email: " + usr.getEmail() + "\r";
-				}
-
-				else {
-
-					return "You need to inform group name.";
-				}
-			}
-
-
-			else if ( message.startsWith("c2s") ) {
-
-				if ( param.length > 1 ) {
-			
-					if ( param[1].equals("compression") ) {
-
-						if ( param.length > 2 ) {
-
-							if ( param[2].equals("enable") || param[2].equals("disable") ) {
-
-								msg = ProcessCmd_c2s(message);
-							}
-						}
-
 						else {
 
-							msg = ProcessCmd_c2s(message);
+							inviteErrors += ", " + conf_jid;
 						}
 					}
 				}
+
+				if (inviteErrors.equals("")) {
+
+					msg="Invitations sent.";
+				}
+
+				msg="Can't send invitation to " + inviteErrors + ".";
 			}
+			else {
 
-
-			else if ( message.startsWith("s2s") ) {
-
-				if ( param.length > 1 ) {
-
-					String s2s_cmd = param[1];
-
-					if ( s2s_cmd.equals("enable") || s2s_cmd.equals("disable") || s2s_cmd.equals("config") ) {
-
-						if ( param.length ==2 ) {
-
-							msg = ProcessCmd_s2s(message);
-						}	
-					}
-
-					if ( s2s_cmd.equals("compression")) {
-
-						if ( param.length ==2 ) {
-
-							msg = ProcessCmd_s2s(message);
-						}
-
-						else {
-
-							if ( param[2].equals("enable") || param[2].equals("disable") ) {
-
-								msg = ProcessCmd_s2s(message);
-							}
-						}
-					}
-
-					else if ( s2s_cmd.equals("whitelist") || s2s_cmd.equals("blacklist") ) {
-
-						if ( param.length > 2 ) {
-
-							if ( param[2].equals("add") || param[2].equals("del") || param[2].equals("enable") || param[2].equals("disable") ) {
-
-								msg = ProcessCmd_s2s(message);
-							}
-						}
-
-						else  {
-
-							msg = ProcessCmd_s2s(message);
-						}
-					}
-				}
+				msg="You need to inform conference room name and JIDs to be invited.";
 			}
+		}
 
+		else if ( message.equals("list conferences") ) {
 
-			else if ( message.startsWith("anonymous login") ) {
+			if ( multiUserChatManager.getMultiUserChatServicesCount() == 0 ) {
 
-				if ( param.length == 2 ) {
-
-					if ( anonymousLogin ) {
-
-						return "Anonymous login permitted.";
-					}
-
-					else {
-
-						return "Anonymous login forbidden.";
-					}
-				}
-
-				else {
-
-					String anon_cmd = param[2];
-
-					if ( anon_cmd.equals("enable") || anon_cmd.equals("disable") ) {
-
-						if ( anon_cmd.equals("enable") ) {
-
-							if ( anonymousLogin ) {
-
-								return "Anonymous login already permitted.";
-							}
-
-							else {
-
-								try {
-	
-									authHandler.setAllowAnonymous(true);
-								}
-								catch (Exception e) {
-
-									Log.error(e.getMessage(), e);
-								}
-
-								return "Anonymous login permitted.";
-							}
-						}
-
-						else {
-
-					 		if ( ! anonymousLogin ) {
-
-								return "Anonymous login already forbidden.";
-							}
-
-							else {
-
-								try {
-
-									authHandler.setAllowAnonymous(false);
-								}
-								catch (Exception e) {
-
-									Log.error(e.getMessage(), e);
-								}
-
-								return "Anonymous login forbidden.";
-							}
-						}
-					}
-				}
-			}
-
-
-			if ( msg.equals("") ) {
-
-				return Integer.toString(msgTot);
+				msg = "There is no conference service enabled.";
 			}
 
 			else {
 
-				return msg;
+				MultiUserChatService multiUserChatService = multiUserChatManager.getMultiUserChatServices().get(0);
+
+				msg = "List of available conference rooms:";
+				
+				List<MUCRoom> mucRooms = multiUserChatService.getChatRooms();
+
+				for (MUCRoom mucRoom:  mucRooms) {
+
+					msg += linebreak + mucRoom.getName();
+				}
 			}
 		}
 	
-		else {
+		else if ( message.equals("list groups") ) {
 
-			Log.debug("B9 - JID " + messg.getFrom() + " is not admin.");
-			return "JID " + to + " is not an Openfire Administrator.";
+			String Groups = "";
+			msg= "";
+			msgTot = 0;
+
+  			for (Group group : groups) {
+
+				msgTot = msgTot + 1;
+
+				if ( Groups != "" ) {
+
+					Groups += linebreak;
+				}
+
+				Groups += group.getName();
+			}
+
+			msg = Integer.toString(msgTot) + " groups available in " + xmppdomain + linebreak + Groups;
 		}
+
+		else if ( message.startsWith("group members") ) {
+
+			String group = "";
+
+			if (param.length > 2) {
+
+				if (param.length == 3) {
+
+					group = param[2];
+				}
+
+				else {
+
+					for (int i = 0; i < param.length; i++) {
+
+						if (i >1) {
+
+							if ( group != "" ) {
+
+								group += " ";
+							}
+
+							group += param[i];
+						}
+					}
+				}	
+
+				Boolean groupFound = false;
+				Group grp = new Group();
+
+			   	for (Group sgroup : groups) {
+	
+					if ( sgroup.getName().equals(group) ) {
+							
+						grp = sgroup;
+						groupFound = true;
+					}
+				}
+
+				if ( !groupFound ) {
+
+					msg="Group " + group + " not found.";
+				}
+					
+				String members = "";
+
+				Collection<JID> jids = grp.getMembers();
+
+				for (JID jid : jids) {
+
+					members += jid.toBareJID() + linebreak;
+				}
+
+				msg = "Group " + group + " member(s):" + linebreak;
+				msg += members;
+			}
+
+			else {
+
+				msg="You need to inform group name.";
+			}
+		}
+
+		else if ( message.startsWith("user info") )  {
+
+			String group = "";
+
+			if (param.length > 2) {
+
+				String user = param[2];
+
+				Boolean userFound = false;
+				User usr = new User();
+
+			   	for (User suser : users) {
+
+					msg += suser.getUsername()+"." + linebreak;
+
+					if ( suser.getUsername().equals(user) ) {
+							
+						usr = suser;
+						userFound = true;
+					}
+				}					
+
+				if ( !userFound ) {
+
+					msg="User " + user + " not found.";
+				}
+					
+				msg = "User " + user + linebreak;
+				msg += "Name: " + usr.getName() + linebreak;
+				msg += "Email: " + usr.getEmail() + linebreak;
+			}
+
+			else {
+
+				msg="You need to inform group name.";
+			}
+		}
+
+
+		else if ( message.startsWith("c2s") ) {
+
+			if ( param.length > 1 ) {
+			
+				if ( param[1].equals("compression") ) {
+
+					if ( param.length > 2 ) {
+
+						if ( param[2].equals("enable") || param[2].equals("disable") ) {
+
+							msg = ProcessCmd_c2s(message,linebreak);
+						}
+					}
+
+					else {
+
+						msg = ProcessCmd_c2s(message,linebreak);
+					}
+				}
+			}
+		}
+
+
+		else if ( message.startsWith("s2s") ) {
+
+			if ( param.length > 1 ) {
+
+				String s2s_cmd = param[1];
+
+				if ( s2s_cmd.equals("enable") || s2s_cmd.equals("disable") || s2s_cmd.equals("config") ) {
+
+					if ( param.length ==2 ) {
+
+						msg = ProcessCmd_s2s(message,linebreak);
+					}	
+				}
+
+				if ( s2s_cmd.equals("compression")) {
+
+					if ( param.length ==2 ) {
+
+						msg = ProcessCmd_s2s(message,linebreak);
+					}
+
+					else {
+
+						if ( param[2].equals("enable") || param[2].equals("disable") ) {
+
+							msg = ProcessCmd_s2s(message,linebreak);
+						}
+					}
+				}
+
+				else if ( s2s_cmd.equals("whitelist") || s2s_cmd.equals("blacklist") ) {
+
+					if ( param.length > 2 ) {
+
+						if ( param[2].equals("add") || param[2].equals("del") || param[2].equals("enable") || param[2].equals("disable") ) {
+
+							msg = ProcessCmd_s2s(message,linebreak);
+						}
+					}
+
+					else  {
+
+						msg = ProcessCmd_s2s(message,linebreak);
+					}
+				}
+			}
+		}
+
+
+		else if ( message.startsWith("anonymous login") ) {
+
+			if ( param.length == 2 ) {
+
+				if ( anonymousLogin ) {
+
+					msg="Anonymous login permitted.";
+				}
+
+				else {
+
+					msg="Anonymous login forbidden.";
+				}
+			}
+
+			else {
+
+				String anon_cmd = param[2];
+
+				if ( anon_cmd.equals("enable") || anon_cmd.equals("disable") ) {
+
+					if ( anon_cmd.equals("enable") ) {
+
+						if ( anonymousLogin ) {
+
+							msg="Anonymous login already permitted.";
+						}
+
+						else {
+
+							try {
+	
+								authHandler.setAllowAnonymous(true);
+							}
+							catch (Exception e) {
+
+								Log.error(e.getMessage(), e);
+							}
+
+							msg="Anonymous login permitted.";
+						}
+					}
+
+					else {
+
+				 		if ( ! anonymousLogin ) {
+
+							msg="Anonymous login already forbidden.";
+						}
+
+						else {
+
+							try {
+
+								authHandler.setAllowAnonymous(false);
+							}
+							catch (Exception e) {
+
+								Log.error(e.getMessage(), e);
+							}
+
+							msg="Anonymous login forbidden.";
+						}
+					}
+				
+				}
+			}
+		}
+
+		if ( msg.equals("") ) {
+
+			msg=Integer.toString(msgTot);
+		}
+
+		return msg;
+
 	}
 
-	public String ProcessCmd_c2s(String message) {
+
+	public String ProcessCmd_c2s(String message, String linebreak) {
 
 		String c2scompression = JiveGlobals.getProperty("xmpp.client.compression.policy");
 
@@ -912,7 +1339,7 @@ class MyMessage {
 		return "error";
 	}
 
-	public String ProcessCmd_s2s(String message) {
+	public String ProcessCmd_s2s(String message, String linebreak) {
 
 		String s2sconfig = JiveGlobals.getProperty("xmpp.server.socket.active");
 		String s2slconfig = JiveGlobals.getProperty("xmpp.server.permission");
@@ -928,7 +1355,7 @@ class MyMessage {
 
 			if ( s2sconfig.equals("true") ) {
 
-				msg = "Server to Server configuration enabled.\r";
+				msg = "Server to Server configuration enabled." + linebreak;
 				
 				if ( s2slconfig.equals("blacklist") ) {
 
@@ -1028,12 +1455,12 @@ class MyMessage {
 
 			if ( s2slconfig.equals("blacklist") ) {
 
-				msg = "Whitelist disabled.\r";
+				msg = "Whitelist disabled." + linebreak;
 			}
 
 			else {
 
-				msg = "Whitelist enabled.\r";
+				msg = "Whitelist enabled." + linebreak;
 			}
 
 			msg += "Server(s) in whitelist:";
@@ -1042,7 +1469,7 @@ class MyMessage {
 
 				for (RemoteServerConfiguration server : s2swl) {
 
-				   	msg += "\r" + server.getDomain()+":"+Integer.toString(server.getRemotePort());
+				   	msg += linebreak + server.getDomain()+":"+Integer.toString(server.getRemotePort());
 				}
 
 				return msg;
@@ -1163,11 +1590,11 @@ class MyMessage {
 
 			if ( s2slconfig.equals("whitelist") ) {
 
-				msg = "Blacklist disabled.\r";
+				msg = "Blacklist disabled." + linebreak;
 			}
 
 			else {
-				msg = "Blacklist enabled.\r";
+				msg = "Blacklist enabled." + linebreak;
 			}
 
 			msg += "Server(s) in blacklist:";
@@ -1176,7 +1603,7 @@ class MyMessage {
 
 				for (RemoteServerConfiguration server : s2sbl) {
 
-					msg += "\r" + server.getDomain();
+					msg += linebreak + server.getDomain();
 				}
 
 				return msg;
@@ -1270,50 +1697,52 @@ class MyMessage {
 		return "error";
 	}
 
-	public String ProcessCmd_help() {
+	public String ProcessCmd_help(String linebreak) {
 
 		Log.debug("B9 - Process help command.");
 
-		msg  = "Available commands:\r";
-		msg += "anonymous login\r";
-		msg += "anonymous login disable\r";
-		msg += "anonymous login enable\r";
-		msg += "c2s compression\r";
-		msg += "c2s compression disable\r";
-		msg += "c2s compression enable\r";
-		msg += "free memory\r";
-		msg += "group members <group name>\r";
-		msg += "help\r";
-		msg += "java version\r";
-		msg += "list conferences\r";
-		msg += "list groups\r";
-		msg += "max memory\r";
-		msg += "online users\r";
-		msg += "openfire version\r";
-		msg += "openfire host\r";
-		msg += "openfire uptime\r";
-		msg += "s2s compression\r";
-		msg += "s2s compression disable\r";
-		msg += "s2s compression enable\r";
-		msg += "s2s config\r";
-		msg += "s2s blacklist\r";
-		msg += "s2s blacklist add <host>\r";
-		msg += "s2s blacklist del <host>\r";
-		msg += "s2s blacklist disable\r";
-		msg += "s2s blacklist enable\r";
-		msg += "s2s enable\r";
-		msg += "s2s disable\r";
-		msg += "s2s whitelist\r";
-		msg += "s2s whitelist add <host> <port>\r";
-		msg += "s2s whitelist del <host>\r";
-		msg += "s2s whitelist disable\r";
-		msg += "s2s whitelist enable\r";
-		msg += "server sessions\r";
-		msg += "total memory\r";
-		msg += "total users\r";
-		msg += "used memory\r";
-		msg += "user info\r";
-		msg += "version\r";
+		msg  = "Available commands:" + linebreak;
+		msg += "anonymous login" + linebreak;
+		msg += "anonymous login disable" + linebreak;
+		msg += "anonymous login enable" + linebreak;
+		msg += "c2s compression" + linebreak;
+		msg += "c2s compression disable" + linebreak;
+		msg += "c2s compression enable" + linebreak;
+		msg += "create conference <room name> [members]" + linebreak;
+		msg += "invite conference <room name> <members>" + linebreak;
+		msg += "free memory" + linebreak;
+		msg += "group members <group name>" + linebreak;
+		msg += "help" + linebreak;
+		msg += "java version" + linebreak;
+		msg += "list conferences" + linebreak;
+		msg += "list groups" + linebreak;
+		msg += "max memory" + linebreak;
+		msg += "online users" + linebreak;
+		msg += "openfire version" + linebreak;
+		msg += "openfire host" + linebreak;
+		msg += "openfire uptime" + linebreak;
+		msg += "s2s compression" + linebreak;
+		msg += "s2s compression disable" + linebreak;
+		msg += "s2s compression enable" + linebreak;
+		msg += "s2s config" + linebreak;
+		msg += "s2s blacklist" + linebreak;
+		msg += "s2s blacklist add <host>" + linebreak;
+		msg += "s2s blacklist del <host>" + linebreak;
+		msg += "s2s blacklist disable" + linebreak;
+		msg += "s2s blacklist enable" + linebreak;
+		msg += "s2s enable" + linebreak;
+		msg += "s2s disable" + linebreak;
+		msg += "s2s whitelist" + linebreak;
+		msg += "s2s whitelist add <host> <port>" + linebreak;
+		msg += "s2s whitelist del <host>" + linebreak;
+		msg += "s2s whitelist disable" + linebreak;
+		msg += "s2s whitelist enable" + linebreak;
+		msg += "server sessions" + linebreak;
+		msg += "total memory" + linebreak;
+		msg += "total users" + linebreak;
+		msg += "used memory" + linebreak;
+		msg += "user info" + linebreak;
+		msg += "version" + linebreak;
 
 		return msg;
 	
