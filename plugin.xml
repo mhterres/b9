@@ -5,9 +5,9 @@
    <name>B9</name>
    <description>Openfire Administration bot.</description>
    <author>Marcelo Hartmann Terres</author>
-   <version>0.3</version>
-   <date>12/10/2014</date>
-   <minServerVersion>3.8.0</minServerVersion>
+   <version>0.3.1</version>
+   <date>08/30/2015</date>
+   <minServerVersion>3.10.0</minServerVersion>
 
    <adminconsole>
         <tab id="tab-server">
